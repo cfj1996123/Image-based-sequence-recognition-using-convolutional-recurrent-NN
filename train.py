@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torchvision.models as models
+
 from torch.utils.data import Dataset, DataLoader
 from torch.autograd import Variable
 
@@ -15,27 +15,7 @@ import numpy as np
 from tqdm import tqdm
 import os
 
-
-class crnn(nn.Module):
-    def __init__(self, hid_dim, char_dim):
-        super().__init__()
-        ## (batch_size,3,a,b) --> (batch_size,512,a/32,b/32)
-        self.vgg16 = models.vgg16(pretrained=True).features
-        ## (seq_len,batch_size,dim1) --> (seq_len,batch_size,2*hid_dim)
-        self.bilstm = nn.LSTM(input_size=512 * 1, hidden_size=hid_dim, batch_first=False, num_layers=2,
-                              dropout=0, bidirectional=True)
-        self.linear1 = nn.Linear(in_features=2 * hid_dim, out_features=char_dim+1, bias=True)  # add a non-character class
-
-    def forward(self, x):
-
-        x = self.vgg16(x)
-        x = x.permute(3, 0, 1, 2)
-        size = x.size()
-        z = x.view(size[0], size[1], size[2] * size[3])
-        z = self.bilstm(z)[0]
-        z = self.linear1(z)  # out: (seq_len,batch_size,char_dim+1)
-
-        return z
+from model import crnn
 
 
 class coco_train(Dataset):
@@ -95,13 +75,20 @@ def data_collate(batch):
     batch = {"img": img, "seq": seq, "seq_len": seq_len}
     return batch
 
+
+## other info
+ckpt_dir = 'checkpoints'
+os.makedirs(ckpt_dir, exist_ok=True)
+restore_from_checkpoint = 'checkpoints/crnn_ckpt_epoch60'
+is_train = True
+
 ## hyperparameters
 gpu = '0'
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 cuda = True if gpu is not '' else False
 
-NUM_epochs = 100
-checkpoint_interval = 5
+NUM_epochs = 500
+checkpoint_interval = 20
 base_lr = 1e-3
 batch_size = 32
 hidden_dim = 128
@@ -112,30 +99,33 @@ transform = Compose([ resize(size=(224,32)) ])
 
 trainset = coco_train(root_dir='cropped_COCO',annotation='desc.json', transform=transform)
 
-
-# data = trainset.__getitem__(0)
-# print(data['image'].shape)
-# print(data['image'].transpose(2,0,1).shape)
-
-
 trainloader = DataLoader(trainset, batch_size=batch_size,
                                           shuffle=True, num_workers=1, collate_fn=data_collate)
 
-#iterator = tqdm(trainloader)
-num_chars = len(trainset.mydict)
-net = crnn(hid_dim=hidden_dim, char_dim=num_chars)
-net.train()
 
+num_chars = len(trainset.mydict)
+net = crnn(hid_dim=hidden_dim, chardict=trainset.mydict)
+if is_train:
+    net.train()
+else:
+    net.eval()
 if cuda:
     net = net.cuda()
-
-
 
 optimizer = optim.Adam(net.parameters(), lr = base_lr, weight_decay=0.0001)
 loss_function = CTCLoss()
 
-epoch = 0
-mean_loss = []
+## restore from checkpoint
+if restore_from_checkpoint != '':
+    ckpt = torch.load(restore_from_checkpoint)
+    net.load_state_dict(ckpt['model_params'])
+    optimizer.load_state_dict(ckpt['optim_params'])
+    epoch = ckpt['epoch']
+    mean_loss = [ ckpt['loss'] ]
+else:
+    epoch = 0
+    mean_loss = []
+
 while epoch < NUM_epochs:
     iterator = tqdm(trainloader)
     for iter, batch in enumerate(iterator):
@@ -164,7 +154,7 @@ while epoch < NUM_epochs:
 
     epoch += 1
     if epoch % checkpoint_interval == 0 or epoch == NUM_epochs:
-        ckpt_path = 'crnn_ckpt_epoch{}'.format(epoch)
+        ckpt_path = join(ckpt_dir, 'crnn_ckpt_epoch{}'.format(epoch))
         torch.save( {'epoch': epoch, 'loss': loss.data[0],
                      'model_params': net.state_dict(),
                      'optim_params': optimizer.state_dict() },
