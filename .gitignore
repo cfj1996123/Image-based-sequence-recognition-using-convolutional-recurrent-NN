@@ -1,0 +1,6 @@
+checkpoints/
+cropped_COCO/
+__pycache__/
+.ipynb_checkpoints/
+warp-ctc/
+.idea/

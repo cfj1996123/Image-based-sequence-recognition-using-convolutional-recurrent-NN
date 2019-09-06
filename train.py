@@ -7,7 +7,7 @@ from torch.autograd import Variable
 
 from torchvision.transforms import Compose
 from warpctc_pytorch import CTCLoss
-
+import cv2
 
 import numpy as np
 from tqdm import tqdm
@@ -30,24 +30,43 @@ cuda = True if gpu is not '' else False
 
 NUM_epochs = 500
 snapshot_interval = 10
-eval_interval = 10
+eval_interval = 1
 
 base_lr = 1e-3
 batch_size = 32
-hidden_dim = 256
+hidden_dim = 128
 ###
 
 
-transform = Compose([ resize(size=(224,32)) ])
+transform = Compose([resize(size=(256,32)),
+                     gaussian_noise(),
+                     ToTensor(),
+                     Normalize(mean=[0.485, 0.456, 0.406],std=[0.229, 0.224, 0.225])
+                     ])
 
-trainset = coco_train(root_dir='cropped_COCO',annotation='desc.json', transform=transform)
-testset = coco_test(root_dir='cropped_COCO',annotation='desc.json', transform=transform)
+
+trainset = synthetic_train(height=32, width=256, num_instances=10000, transform=transform)
+testset = synthetic_train(height=32, width=256, num_instances=batch_size, transform=transform)
+# trainset = coco_train(root_dir='cropped_COCO',annotation='desc.json', transform=transform)
+# testset = coco_test(root_dir='cropped_COCO',annotation='desc.json', transform=transform)
+
 trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=1, collate_fn=train_data_collate)
 testloader = DataLoader(testset, batch_size=batch_size, shuffle=True, num_workers=1, collate_fn=test_data_collate)
 
 
+# # for debug use
+# sample = trainset.__getitem__(5)
+#
+# cv2.imshow(sample['text'], sample['image'].numpy().astype(np.uint8).transpose((1,2,0)))
+# cv2.waitKey(0)
+#
+# train_batch = next(iter(trainloader))
+# img  = train_batch['img'][5]
+# cv2.imshow(train_batch['text'][5], img.numpy().astype(np.uint8).transpose((1,2,0)))
+# cv2.waitKey(0)
 
-net = crnn(hid_dim=hidden_dim, chardict=trainset.mydict)
+
+net = crnn(hid_dim=hidden_dim, chardict=trainset.chardict)
 if is_train:
     net.train()
 else:
@@ -97,11 +116,14 @@ while epoch < NUM_epochs:
             imgs = imgs.cuda()
 
         preds = net(imgs).cpu()
-        #print(preds.size())
+        #print(preds[:,0,:])
+        #print(torch.argmax(preds, dim=2))
+
+
         pred_lens = Variable(torch.Tensor( [preds.size(0)] * preds.size(1) ).int())
         loss = loss_function(preds, labels, pred_lens, label_lens) / batch_size
         loss.backward()
-        nn.utils.clip_grad_norm(net.parameters(), 1.0)
+        nn.utils.clip_grad_norm(net.parameters(), 10.0)
 
         mean_loss.append(loss.data[0])
         optimizer.step()
@@ -122,18 +144,19 @@ while epoch < NUM_epochs:
 
     if epoch % eval_interval == 0 or epoch == NUM_epochs:
         net.eval()
-        test_batch = next(iter(testloader))
-        test_batch_size = test_batch['img'].size(0)
-        with torch.no_grad():
-            preds = net(test_batch['img'].cuda()).cpu()
-        preds = torch.argmax(preds, dim=2)
-        preds = preds.permute(1, 0)
-        print(preds.size())
-        print(preds)
-        for i in range(test_batch_size):
-            pred_label = net.seq_to_text(preds[i].tolist())
-            true_label = test_batch['seq'][i]
-            print('true: {}, pred: {}'.format(true_label, pred_label))
+        for test_batch in testloader:
+            #test_batch = next(iter(testloader))
+            test_batch_size = test_batch['img'].size(0)
+            with torch.no_grad():
+                preds = net(test_batch['img'].cuda()).cpu()
+            preds = torch.argmax(preds, dim=2)
+            preds = preds.permute(1, 0)
+            # print(preds.size())
+            # print(preds)
+            for i in range(test_batch_size):
+                pred_label = net.seq_to_text(preds[i].tolist())
+                true_label = test_batch['text'][i]
+                print('true: {}, pred: {}'.format(true_label, pred_label))
 
         net.train()
 
