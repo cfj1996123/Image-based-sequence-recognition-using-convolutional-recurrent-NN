@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import string
 import torchvision.transforms
-from torchvision.transforms import Compose
+
 
 class synthetic_train(Dataset):
     def __init__(self, height, width, chardict=string.ascii_letters+string.digits ,num_instances=20000, min_numchars=1, max_numchars=10, transform=None):
@@ -190,11 +190,5 @@ def test_data_collate(batch):
 
 
 
-if __name__ == '__main__':
 
-    transform = None
-    synth = synthetic_train(height=32, width=224, num_instances=32, transform=transform)
-    sample = synth.__getitem__(5)
-    cv2.imshow(sample['text'], sample['image'])
-    cv2.waitKey(0)
 

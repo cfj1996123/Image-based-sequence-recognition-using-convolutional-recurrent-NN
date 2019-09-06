@@ -8,7 +8,6 @@ from torch.autograd import Variable
 from torchvision.transforms import Compose
 from warpctc_pytorch import CTCLoss
 import cv2
-
 import numpy as np
 from tqdm import tqdm
 import os
@@ -28,7 +27,7 @@ gpu = '0'
 os.environ["CUDA_VISIBLE_DEVICES"] = gpu
 cuda = True if gpu is not '' else False
 
-NUM_epochs = 500
+NUM_epochs = 100
 snapshot_interval = 10
 eval_interval = 1
 
@@ -116,9 +115,6 @@ while epoch < NUM_epochs:
             imgs = imgs.cuda()
 
         preds = net(imgs).cpu()
-        #print(preds[:,0,:])
-        #print(torch.argmax(preds, dim=2))
-
 
         pred_lens = Variable(torch.Tensor( [preds.size(0)] * preds.size(1) ).int())
         loss = loss_function(preds, labels, pred_lens, label_lens) / batch_size
@@ -131,7 +127,7 @@ while epoch < NUM_epochs:
         ## set description
         description = 'epoch:{}, iteration:{}, current loss:{}, mean loss:{}'.format(epoch, iter, loss.data[0], np.mean(mean_loss))
         iterator.set_description(description)
-        #print(description)
+
 
     epoch += 1
     if epoch % snapshot_interval == 0 or epoch == NUM_epochs:
@@ -151,8 +147,7 @@ while epoch < NUM_epochs:
                 preds = net(test_batch['img'].cuda()).cpu()
             preds = torch.argmax(preds, dim=2)
             preds = preds.permute(1, 0)
-            # print(preds.size())
-            # print(preds)
+
             for i in range(test_batch_size):
                 pred_label = net.seq_to_text(preds[i].tolist())
                 true_label = test_batch['text'][i]
