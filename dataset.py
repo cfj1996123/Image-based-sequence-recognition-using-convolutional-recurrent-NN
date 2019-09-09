@@ -189,6 +189,16 @@ def test_data_collate(batch):
     return batch
 
 
+def inv_transform(img_tensor):
+    img = img_tensor.numpy()
+    mean = [0.485, 0.456, 0.406]
+    std = [0.229, 0.224, 0.225]
+    for i in range(3):
+        img[i] = img[i] * std[i] + mean[i]
+
+    img = img * 255.0
+    img = img.transpose((1,2,0))
+    return img.astype(np.uint8)
 
 
 
