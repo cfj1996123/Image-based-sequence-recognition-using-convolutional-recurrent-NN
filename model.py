@@ -32,7 +32,7 @@ class crnn(nn.Module):
             if (i == 0 or seq[i] != seq[i-1]) and seq[i] > 0:
                 text.append(self.chardict[seq[i]-1])
 
-        return text
+        return ''.join(text)
 
 
 if __name__ == '__main__':
