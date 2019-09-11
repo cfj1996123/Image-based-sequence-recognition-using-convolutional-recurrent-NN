@@ -4,7 +4,7 @@ import torch.optim as optim
 
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
-import torchvision.transforms
+
 
 from torchvision.transforms import Compose
 from warpctc_pytorch import CTCLoss
@@ -31,8 +31,10 @@ def get_dataset(hparams, args):
         raise ValueError('Dataset not supported.')
 
     if args.dataset == 'synthesized':
-        trainset = synthetic_train(height=hparams.syn_height, width=hparams.syn_width, num_instances=hparams.syn_num_training, transform=transform)
-        testset = synthetic_train(height=hparams.syn_height, width=hparams.syn_width, num_instances=hparams.syn_num_test, transform=transform)
+        trainset = synthetic_train(height=hparams.syn_height, width=hparams.syn_width,
+                                   num_instances=hparams.syn_num_training, transform=transform)
+        testset = synthetic_train(height=hparams.syn_height, width=hparams.syn_width,
+                                  num_instances=hparams.syn_num_test, transform=transform)
 
     if args.dataset == 'coco':
         trainset = coco_train(root_dir='cropped_COCO',annotation='desc.json', transform=transform)
@@ -44,8 +46,10 @@ def get_dataset(hparams, args):
 def train(hparams, args):
 
     trainset, testset = get_dataset(hparams, args)
-    trainloader = DataLoader(trainset, batch_size=hparams.batch_size, shuffle=True, num_workers=1, collate_fn=train_data_collate)
-    testloader = DataLoader(testset, batch_size=hparams.batch_size, shuffle=True, num_workers=1, collate_fn=test_data_collate)
+    trainloader = DataLoader(trainset, batch_size=hparams.batch_size, shuffle=True,
+                             num_workers=1, collate_fn=train_data_collate)
+    testloader = DataLoader(testset, batch_size=hparams.batch_size, shuffle=True,
+                            num_workers=1, collate_fn=test_data_collate)
 
     # for debug use
     # while True:
